@@ -16,18 +16,22 @@ This document outlines the design for a command-line tool that detects reconnais
 ---
 The tool will:
 - Process CloudTrail logs in JSON format from one or multiple files
-- Detect reconnaissance activity using predefined API signatures and optional machine learning clustering
+- Detect reconnaissance activity using predefined API signatures and machine learning clustering
 - Output timeframes of suspicious activity with confidence scores, actor identities, and example API calls
 - Support filtering by time ranges and specific API types
-- Handle large log volumes efficiently using TailPipe
+- Handle large log volumes efficiently using pandas DataFrames
+
+The tool will not:
+- Detect activities associated with actions in stages later than reconnaissance, such as data exfiltration, lateral movement, or privilege escalation
+- Analyze the intention of attackers or profile attackers beyond basic identity information
+- Integrate with external threat intelligence feeds like MITRE or SIEM systems
 
 ### Definitions, Acronyms and Abbreviations
 
 ---
 - **CloudTrail**: AWS service that logs API calls and account activity
 - **Reconnaissance**: Information gathering activities that may precede cyber attacks
-- **TailPipe**: Go-based open source log querying tool that uses DuckDB for processing
-- **DuckDB**: In-process analytical database designed for analytical workloads
+- **pandas**: Python library for data manipulation and analysis, providing DataFrame structures for efficient log processing
 - **K-means**: Clustering algorithm that partitions data into K groups based on similarities
 - **LogAI**: Salesforce's open-source log analysis and intelligence platform
 
@@ -35,7 +39,7 @@ The tool will:
 
 ---
 - [Flaws.cloud CloudTrail Dataset](https://summitroute.com/blog/2020/10/09/public_dataset_of_cloudtrail_logs_from_flaws_cloud/)
-- [TailPipe GitHub Repository](https://github.com/turbot/tailpipe)
+- [pandas Documentation](https://pandas.pydata.org/docs/)
 - [LogAI Clustering Demo](https://github.com/salesforce/logai/tree/main?tab=readme-ov-file#log-clustering)
 <!-- - [AWS Reconnaissance API Reference](https://github.com/shijiew555/ReconRaptor/blob/main/docs/aws_recon_api_reference.md) -->
 - [AWS Reconnaissance API Reference](aws_recon_api_reference.md)
@@ -46,10 +50,15 @@ The tool will:
 
 The system is designed as a command-line tool that processes CloudTrail logs to detect reconnaissance activity. It employs a two-stage detection approach:
 
-1. **Stage 1**: Gather suspicious logs using either API signature matching or machine learning clustering
+1. **Stage 1**: Gather suspicious logs using either API signature matching and K-means clustering
 2. **Stage 2**: Analyze temporal patterns to identify concentrated timeframes of suspicious activity
 
-The tool leverages TailPipe for efficient log processing and provides configurable output filtering options. The design prioritizes performance for large log volumes while maintaining accuracy in detection.
+The tool leverages pandas DataFrames for efficient log processing and provides configurable output filtering options. The design prioritizes performance for large log volumes while maintaining accuracy in detection.
+
+### Technology Choice
+
+---
+**pandas DataFrames** were selected as the primary query engine after evaluating alternatives including TailPipe + DuckDB. pandas was chosen for its performance (processing large logs within seconds), language consistency (Python-native), and mature ecosystem. TailPipe + DuckDB were rejected due to language inconsistency (Go vs Python) and limited ecosystem maturity compared to pandas.
 
 ## System Components
 
@@ -109,24 +118,42 @@ reconraptor -f logs/*.json --output json --verbose
 
 The reconnaissance detection workflow consists of 2 stages designed to identify and analyze suspicious activity patterns in CloudTrail logs:
 
-**Stage 1: Suspicious Log Gathering** - This stage filters the input logs to identify entries that match reconnaissance patterns. It employs 2 different approaches to detect suspicious activity, with the primary method being API matching and a ML approach as an enhancement.
+**Stage 1: Suspicious Log Gathering** - This stage employs a two-step approach: first filtering logs for reconnaissance APIs using pandas, then applying K-means clustering to separate suspicious logs from legitimate ones based on error patterns.
 
 **Stage 2: Timeframe Analysis** - This stage analyzes the temporal distribution of suspicious logs to identify the timeframes where reconnaissance activity occurred. It uses a sliding window algorithm to find timeframes with high density of suspicious activity. It calculates the identities, confidence score, example APIs, for each identified timeframe.
+
+**Abandoned Algorithm Ideas:**
+
+- **Supervised Learning with CloudWatch**: Considered using CloudWatch to generate labeled data from flaws.cloud dataset, but rejected due to continuous retraining requirement.
 
 #### Stage 1: Suspicious Log Gathering
 
 ---
-There are 2 different approaches for Stage 1.
+Stage 1 employs a two-step approach to identify suspicious logs from CloudTrail data:
 
-*Approach 1: API Signature Matching (Primary Implementation)*
+**Step 1: API Signature Filtering**
+First, we filter logs that contain APIs associated with reconnaissance activities. All logs with reconnaissance APIs specified in [aws_recon_api_reference.md](https://github.com/shijiew555/ReconRaptor/blob/main/docs/aws_recon_api_reference.md) will be selected. This is implemented using pandas DataFrame operations for efficient filtering.
 
+```python
+# Filter logs containing reconnaissance APIs
+filtered_logs = df[df['eventName'].isin(['DescribeInstances', 'ListBuckets', 'GetUser', 'ListRoles'])]
+```
 
-This approach scans logs with a predefined lists of AWS API calls commonly associated with reconnaissance activities. See the curated list in [aws_recon_api_reference.md](https://github.com/shijiew555/ReconRaptor/blob/main/docs/aws_recon_api_reference.md). The tool executes SQL queries through TailPipe to filter CloudTrail logs for specific API names like `DescribeInstances`, `ListBuckets`, `GetUser`, `ListRoles`, and `DescribeSecurityGroups`. 
+**Step 2: K-means Clustering for Suspicious Log Identification**
+The filtered logs are then processed using a K-means clustering model to separate suspicious logs from legitimate ones. The model clusters logs into 24 groups based on similarity, and the top 3 groups with the highest percentage of error codes are selected as suspicious.
 
-*Approach 2: K-means Clustering (Future Enhancement)*
+**Clustering Implementation Details:**
+- **Model Source**: The K-means clustering model is part of the open-source LogAI project, with clustering demo available at: https://github.com/salesforce/logai/tree/main?tab=readme-ov-file#log-clustering
+- **Feature Vector**: Each log is represented by a 13-dimensional feature vector containing: `("eventName", "eventSource", "eventCategory", "eventType", "userIdentity", "sessionContext", "recipientAccountId", "sourceIPAddress", "awsRegion", "userAgent", "errorCode", "requestParameters", "responseElements")`
+- **Suspicious Log Selection**: Logs in the top 3 clusters with the **highest error percentages** are flagged as suspicious. This approach leverages the insight that legitimate logs (e.g., from Infrastructure as Code workflows) typically don't result in many errors, while reconnaissance activities often generate error codes due to access attempts or invalid parameters.
 
+**Advantages of This Approach:**
+- **Better Accuracy**: The K-means model can correlate logs using more information than just API names, providing more nuanced detection
+- **Error-based Filtering**: Uses error codes as a reliable indicator of suspicious activity
+- **Comprehensive Feature Analysis**: Considers multiple dimensions including user identity, session context, and request parameters
 
-This approach leverages K-means clustering model introduced by logAI to group logs by similarity across multiple dimensions beyond just API names. The algorithm partitions logs into clusters and then scores each cluster based on the percentage of reconnaissance APIs it contains. The top 3 clusters with the highest reconnaissance percentages are selected for stage 2.
+**Trade-offs:**
+- May omit some suspicious logs that don't fall into the top 3 error-prone clusters. 
 
 #### Stage 2: Timeframe Selection and Analysis
 
@@ -134,8 +161,24 @@ This approach leverages K-means clustering model introduced by logAI to group lo
 
 **Sliding Window Algorithm**
 
+The sliding window algorithm examines the temporal distribution of suspicious logs by moving a 1-hour time window across the log timeline. Timeframes that contain a density of suspicious logs reaching a 10% threshold are flagged as potential reconnaissance periods.
 
-The sliding window algorithm examines the temporal distribution of suspicious logs by moving a configurable time window across the log timeline. Timeframes that meet a minimum density threshold are identified as potential reconnaissance periods. The algorithm then merges overlapping timeframes to create final detection results.
+**Algorithm Parameters:**
+- **Window Size**: 1 hour
+- **Density Threshold**: 10% suspicious logs within the timeframe
+- **Window Movement**: Continuous sliding across the timeline
+
+**Design Rationale:**
+This approach is based on the observation that reconnaissance scans tend to aggregate temporally, often occurring as sudden bursts of activity. The algorithm focuses on timeframes with concentrated suspicious activity rather than isolated incidents.
+
+**Advantages:**
+- **Threat-focused Detection**: Prioritizes timeframes with high concentrations of reconnaissance activity, which pose greater security risks
+- **Efficient Processing**: Simple sliding window implementation with clear thresholds
+- **Practical Security Value**: Aligns with security analysts' need to identify periods of heightened threat activity
+
+**Trade-offs:**
+- Could miss reconnaissance activities that are spread thinly over time
+- **Justification**: Timeframes with just a few reconnaissance scans pose significantly lower threat levels and are therefore less critical for immediate security response
 
 **Result Attribute Calculation**
 
@@ -148,6 +191,7 @@ For each identified timeframe, the tool calculates 3 key attributes:
 - **Identities**: A list of tuple (IP, IAM user, user-agent, OS) from suspicious logs in the timeframe.
 
 - **Example APIs**: A list of all reconnaissance API calls found within the suspicious logs of the timeframe.
+
 
 ### Sequence Diagram
 
