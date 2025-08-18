@@ -16,7 +16,7 @@ This document outlines the design for a command-line tool that detects reconnais
 ---
 The tool will:
 - Process CloudTrail logs in JSON format from one or multiple files
-- Detect reconnaissance activity using predefined API signatures and machine learning clustering
+- Detect reconnaissance activity using read-only filtering and machine learning clustering
 - Output timeframes of suspicious activity with confidence scores, actor identities, and example API calls
 - Support filtering by time ranges and specific API types
 - Handle large log volumes efficiently using pandas DataFrames
@@ -32,7 +32,7 @@ The tool will not:
 - **CloudTrail**: AWS service that logs API calls and account activity
 - **Reconnaissance**: Information gathering activities that may precede cyber attacks
 - **pandas**: Python library for data manipulation and analysis, providing DataFrame structures for efficient log processing
-- **K-means**: Clustering algorithm that partitions data into K groups based on similarities
+- **DBSCAN**: Clustering algorithm that partitions data into K groups based on similarities. Excludes outliers from groups.
 - **LogAI**: Salesforce's open-source log analysis and intelligence platform
 
 ### References
@@ -50,7 +50,7 @@ The tool will not:
 
 The system is designed as a command-line tool that processes CloudTrail logs to detect reconnaissance activity. It employs a two-stage detection approach:
 
-1. **Stage 1**: Gather suspicious logs using either API signature matching and K-means clustering
+1. **Stage 1**: Gather suspicious logs using either API signature matching and ML clustering
 2. **Stage 2**: Analyze temporal patterns to identify concentrated timeframes of suspicious activity
 
 The tool leverages pandas DataFrames for efficient log processing and provides configurable output filtering options. The design prioritizes performance for large log volumes while maintaining accuracy in detection.
@@ -118,37 +118,39 @@ reconraptor -f logs/*.json --output json --verbose
 
 The reconnaissance detection workflow consists of 2 stages designed to identify and analyze suspicious activity patterns in CloudTrail logs:
 
-**Stage 1: Suspicious Log Gathering** - This stage employs a two-step approach: first filtering logs for reconnaissance APIs using pandas, then applying K-means clustering to separate suspicious logs from legitimate ones based on error patterns.
+**Stage 1: Suspicious Log Gathering** - This stage employs a two-step approach: first filtering logs with `readOnly` set to true using pandas, then applying DBSCAN clustering to separate suspicious logs from legitimate ones based on error patterns.
 
 **Stage 2: Timeframe Analysis** - This stage analyzes the temporal distribution of suspicious logs to identify the timeframes where reconnaissance activity occurred. It uses a sliding window algorithm to find timeframes with high density of suspicious activity. It calculates the identities, confidence score, example APIs, for each identified timeframe.
 
 **Abandoned Algorithm Ideas:**
 
 - **Supervised Learning with CloudWatch**: Considered using CloudWatch to generate labeled data from flaws.cloud dataset, but rejected due to continuous retraining requirement.
+- **K-means**: A clustering method that is not density-based. It is more prone to the impact of outliers than DBSCAN. 
 
 #### Stage 1: Suspicious Log Gathering
 
 ---
 Stage 1 employs a two-step approach to identify suspicious logs from CloudTrail data:
 
-**Step 1: API Signature Filtering**
-First, we filter logs that contain APIs associated with reconnaissance activities. All logs with reconnaissance APIs specified in [aws_recon_api_reference.md](https://github.com/shijiew555/ReconRaptor/blob/main/docs/aws_recon_api_reference.md) will be selected. This is implemented using pandas DataFrame operations for efficient filtering.
+**Step 1: Read-only Filtering**
+First, we filter logs where the `readOnly` field is set to true, since reconnaissance scans perform read-only operations. This is implemented using pandas DataFrame operations for efficient filtering.
 
 ```python
-# Filter logs containing reconnaissance APIs
-filtered_logs = df[df['eventName'].isin(['DescribeInstances', 'ListBuckets', 'GetUser', 'ListRoles'])]
+# Filter logs containing read-only operations
+filtered_logs = df[df['readOnly'] == True]
 ```
 
-**Step 2: K-means Clustering for Suspicious Log Identification**
-The filtered logs are then processed using a K-means clustering model to separate suspicious logs from legitimate ones. The model clusters logs into 24 groups based on similarity, and the top 3 groups with the highest percentage of error codes are selected as suspicious.
+**Step 2: DBSCAN Clustering for Suspicious Log Identification**
+The filtered logs are then processed using a DBSCAN clustering model to separate suspicious logs from legitimate ones. The model clusters logs into 24 groups based on similarity, and the top 3 groups with the highest percentage of error codes are selected as suspicious.
 
 **Clustering Implementation Details:**
-- **Model Source**: The K-means clustering model is part of the open-source LogAI project, with clustering demo available at: https://github.com/salesforce/logai/tree/main?tab=readme-ov-file#log-clustering
+- **Model Source**: The DBSCAN clustering model is part of the open-source LogAI project, with clustering demo available at: https://github.com/salesforce/logai/tree/main?tab=readme-ov-file#log-clustering
 - **Feature Vector**: Each log is represented by a 13-dimensional feature vector containing: `("eventName", "eventSource", "eventCategory", "eventType", "userIdentity", "sessionContext", "recipientAccountId", "sourceIPAddress", "awsRegion", "userAgent", "errorCode", "requestParameters", "responseElements")`
 - **Suspicious Log Selection**: Logs in the top 3 clusters with the **highest error percentages** are flagged as suspicious. This approach leverages the insight that legitimate logs (e.g., from Infrastructure as Code workflows) typically don't result in many errors, while reconnaissance activities often generate error codes due to access attempts or invalid parameters.
+- **Outlier Handling:** DBSCAN use a density-based clustering method that labels noise rather than forcing every point into a cluster. A point without sufficient neighbors, This prevents one-off events from forming artificial tiny clusters.
 
 **Advantages of This Approach:**
-- **Better Accuracy**: The K-means model can correlate logs using more information than just API names, providing more nuanced detection
+- **Better Accuracy**: The DBSCAN model can correlate logs using more information than just API names, providing more nuanced detection
 - **Error-based Filtering**: Uses error codes as a reliable indicator of suspicious activity
 - **Comprehensive Feature Analysis**: Considers multiple dimensions including user identity, session context, and request parameters
 
