@@ -141,7 +141,12 @@ filtered_logs = df[df['readOnly'] == True]
 ```
 
 **Step 2: DBSCAN Clustering for Suspicious Log Identification**
-The filtered logs are then processed using a DBSCAN clustering model to separate suspicious logs from legitimate ones. The model clusters logs into 24 groups based on similarity, and the top 3 groups with the highest percentage of error codes are selected as suspicious.
+The filtered logs are then processed using a DBSCAN clustering model to separate suspicious logs from legitimate ones. The model clusters logs into 24 groups based on similarity, and the top 3 groups with the following indicators are selected as suspicious:
+- Highest percentage of error codes 
+- Highest average number of different APIs that each user accessed
+- Least average number of source IP address overlap with rest of the logs for each user
+- Least average number of user-agent overlap with rest of the logs for each user
+- Least average number of OS overlap with rest of the logs for each user
 
 **Clustering Implementation Details:**
 - **Model Source**: The DBSCAN clustering model is part of the open-source LogAI project, with clustering demo available at: https://github.com/salesforce/logai/tree/main?tab=readme-ov-file#log-clustering
@@ -156,6 +161,9 @@ The filtered logs are then processed using a DBSCAN clustering model to separate
 
 **Trade-offs:**
 - May omit some suspicious logs that don't fall into the top 3 error-prone clusters. 
+- Unable to apply rule-based matching since clustering groups logs from different times. As a mitigation, we select suspicious groups with more indicators.
+
+
 
 #### Stage 2: Timeframe Selection and Analysis
 
@@ -166,8 +174,8 @@ The filtered logs are then processed using a DBSCAN clustering model to separate
 The sliding window algorithm examines the temporal distribution of suspicious logs by moving a 1-hour time window across the log timeline. Timeframes that contain a density of suspicious logs reaching a 10% threshold are flagged as potential reconnaissance periods.
 
 **Algorithm Parameters:**
-- **Window Size**: 1 hour
-- **Density Threshold**: 10% suspicious logs within the timeframe
+- **Window Size**: 5 min
+- **Density Threshold**: 40% suspicious logs within the timeframe
 - **Window Movement**: Continuous sliding across the timeline
 
 **Design Rationale:**
