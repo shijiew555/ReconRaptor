@@ -7,6 +7,7 @@ __pycache__/
 .pytest_cache/
 
 # Data directory - ignore all JSON files
+data/
 data/*.json
 
 # ide files
