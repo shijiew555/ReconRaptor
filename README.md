@@ -3,7 +3,7 @@
 A CLI tool that sniffs out suspicious reconnaissance activity in AWS CloudTrail logs.
 
 ## Environment Setup
-Currently supports MacOS and Linux on X86 machine. We use Miniconda3 for environment setup.
+Currently supports MacOS and Linux on X86 machine. We will use Miniconda3 for environment setup.
 
 Install Miniconda3:
 ```bash
@@ -33,15 +33,20 @@ For simplicity, we will be using the 2 most recent log files covering about 6 mo
 
 ## Usage
 
-Run the tool with CloudTrail logs:
+ReconRaptor offers filter options for output, either by time, API type, or output format. It also allows different output formats, either as table or JSON.
 
 ```bash
-python3 pipeline.py --logs-dir ./data
+# Basic usage
+python -m reconraptor.cli -f data/*.json
+
+# Show clustering details
+python -m reconraptor.cli -f data/*.json --verbose
 ```
 
-Run with specific DBSCAN clustering parameters:
+**CLI Options:**
 
-```bash
-python3 pipeline.py --logs-dir ./data --eps 1.5 --min-samples 20 
-```
+- `-f, --files`: CloudTrail JSON files or directories to analyze (required)
+- `--output`: Output format: "table" (default) or "json"
+- `--verbose`: Enable detailed logging (list DBSCAN clustering details for each log group )
+- `--help`: Show help information
 
