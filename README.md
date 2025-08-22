@@ -46,7 +46,6 @@ python -m reconraptor.cli -f data/*.json --verbose
 **CLI Options:**
 
 - `-f, --files`: CloudTrail JSON files or directories to analyze (required)
-- `--output`: Output format: "table" (default) or "json"
 - `--verbose`: Enable detailed logging (list DBSCAN clustering details for each log group )
 - `--help`: Show help information
 
