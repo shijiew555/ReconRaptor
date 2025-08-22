@@ -23,9 +23,9 @@ conda activate reconraptor-env
 
 ## Download CloudTrail Logs Data
 
-We will be using `flaws.cloud`, a public CloudTrail logs dataset containing logs associated with various kinds of activities in an AWS system.
+We will be using `flaws.cloud`, a public CloudTrail logs dataset containing logs associated with various kinds of activities in an AWS system. For simplicity, we will be using the 2 most recent log files covering about 6 months of log activities.
 
-For simplicity, we will be using the 2 most recent log files covering about 6 months of log activities:
+Run `download_data.sh` will create folder `data/` containing the 2 most recent log files:
 
 ```bash
 ./download_data.sh
