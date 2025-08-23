@@ -37,10 +37,13 @@ ReconRaptor offers filter options for output, either by time, API type, or outpu
 
 ```bash
 # Basic usage
-python -m reconraptor.cli -f data/*.json
+python -m reconraptor.main -f data/*.json
+
+# Output results in json
+python -m reconraptor.main -f data/*.json --output json
 
 # Show clustering details
-python -m reconraptor.cli -f data/*.json --verbose
+python -m reconraptor.main -f data/*.json --verbose
 ```
 
 **CLI Options:**
@@ -48,4 +51,6 @@ python -m reconraptor.cli -f data/*.json --verbose
 - `-f, --files`: CloudTrail JSON files or directories to analyze (required)
 - `--verbose`: Enable detailed logging (list DBSCAN clustering details for each log group )
 - `--help`: Show help information
+
+## Testing
 
