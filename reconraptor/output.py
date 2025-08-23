@@ -158,9 +158,114 @@ def format_timeframes_table(timeframes: Sequence[TimeframeSummary]) -> str:
     return "\n".join(lines)
 
 
+def _format_output(data: dict, output_format: str, section_name: str, verbose: bool = False) -> None:
+    """Helper function to format and print output in the specified format."""
+    
+    # Define output formatters for each section and format
+    formatters = {
+        "table": {
+            "clusters": _output_clusters_table,
+            "suspicious": _output_suspicious_table,
+            "timeframes": _output_timeframes_table
+        },
+        "json": {
+            "clusters": _output_clusters_json,
+            "suspicious": _output_suspicious_json,
+            "timeframes": _output_timeframes_json
+        }
+    }
+    
+    # Skip clusters section if not verbose
+    if section_name == "clusters" and not verbose:
+        return
+    
+    # Execute the appropriate formatter
+    if output_format in formatters and section_name in formatters[output_format]:
+        formatters[output_format][section_name](data)
+    else:
+        print(f"Unknown output format '{output_format}' or section '{section_name}'")
+
+
+def _output_clusters_table(data: dict) -> None:
+    """Helper function to output clusters in table format."""
+    print()
+    print("==========================================Clusters Metadata==========================================")
+    print()
+    print(format_cluster_metadata_text(data["df"], data["labels"]))
+
+
+def _output_suspicious_table(data: dict) -> None:
+    """Helper function to output suspicious clusters in table format."""
+    print()
+    print(f"Selected Top Suspicious Cluster Labels: {', '.join(map(str, data['chosen_labels']))}")
+    print(f"Suspicious Logs Count: {data['suspicious_count']:,} out of {data['total_readonly']:,} readOnly logs")
+    print(f"Suspicious Ratio: {(data['suspicious_count'] / data['total_readonly'] * 100):.1f}%")
+    print()
+
+
+def _output_timeframes_table(data: dict) -> None:
+    """Helper function to output timeframes in table format."""
+    print()
+    print(format_timeframes_table(data["timeframes"]))
+
+
+def _output_clusters_json(data: dict) -> None:
+    """Helper function to output clusters in JSON format."""
+    import json
+    clusters = []
+    df_clustered = data["df"].copy()
+    df_clustered["cluster"] = data["labels"]
+    
+    for cluster_id in sorted(set(data["labels"])):
+        if cluster_id == -1:
+            continue
+        cluster_data = df_clustered[df_clustered["cluster"] == cluster_id]
+        clusters.append({
+            "cluster_id": int(cluster_id),
+            "size": len(cluster_data),
+            "error_rate": float(cluster_data["errorCode"].notna().mean()),
+            "event_names": sorted(set(str(x) for x in cluster_data.get("eventName", [])))
+        })
+    
+    print(json.dumps({"clusters": clusters}, indent=2))
+
+
+def _output_suspicious_json(data: dict) -> None:
+    """Helper function to output suspicious clusters in JSON format."""
+    import json
+    print(json.dumps({
+        "suspicious_clusters": data["chosen_labels"],
+        "suspicious_count": data["suspicious_count"],
+        "total_readonly": data["total_readonly"]
+    }, indent=2))
+
+
+def _output_timeframes_json(data: dict) -> None:
+    """Helper function to output timeframes in JSON format."""
+    import json
+    tf_data = []
+    for tf in data["timeframes"]:
+        tf_data.append({
+            "start": tf.start.isoformat(),
+            "end": tf.end.isoformat(),
+            "confidence": tf.confidence,
+            "identities": tf.identities,
+            "example_apis": tf.example_apis
+        })
+    
+    print(json.dumps({"suspicious_timeframes": tf_data}, indent=2))
+
+
 __all__ = [
     "format_cluster_metadata_text",
     "format_timeframes_table",
+    "_format_output",
+    "_output_clusters_table",
+    "_output_suspicious_table",
+    "_output_timeframes_table",
+    "_output_clusters_json",
+    "_output_suspicious_json",
+    "_output_timeframes_json",
 ]
 
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import os
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
@@ -8,6 +10,7 @@ import pandas as pd
 from sklearn.cluster import DBSCAN
 from sklearn.preprocessing import StandardScaler
 
+from .parser import load_cloudtrail_dir
 from .utils import (
     safe_str,
     hash32,
@@ -17,6 +20,16 @@ from .utils import (
     num_keys,
     guess_os_from_user_agent,
 )
+
+
+@dataclass
+class TimeframeSummary:
+    start: pd.Timestamp
+    end: pd.Timestamp
+    confidence: float
+    identities: List[Tuple[str, str, str, str]]  # (ip, iam, user-agent, os)
+    example_apis: List[str]
+
 
 
 def encode_row_to_vector(row: pd.Series) -> np.ndarray:
@@ -170,15 +183,6 @@ def print_cluster_metadata(df: pd.DataFrame, labels: np.ndarray, limit_event_nam
         )
 
 
-@dataclass
-class TimeframeSummary:
-    start: pd.Timestamp
-    end: pd.Timestamp
-    confidence: float
-    identities: List[Tuple[str, str, str, str]]  # (ip, iam, user-agent, os)
-    example_apis: List[str]
-
-
 def analyze_timeframes(
     df_all: pd.DataFrame,
     df_suspicious: pd.DataFrame,
@@ -264,6 +268,89 @@ def _summarize_interval(
     )
 
 
+def filter_by_time(df: pd.DataFrame, start_time: Optional[str], end_time: Optional[str]) -> pd.DataFrame:
+    """Filter DataFrame by time range if specified."""
+    if not start_time and not end_time:
+        return df
+    
+    if "eventTime" not in df.columns:
+        return df
+    
+    df = df.copy()
+    if start_time:
+        start_dt = pd.to_datetime(start_time)
+        df = df[df["eventTime"] >= start_dt]
+    if end_time:
+        end_dt = pd.to_datetime(end_time)
+        df = df[df["eventTime"] <= end_dt]
+    
+    return df
+
+
+def filter_by_api_types(df: pd.DataFrame, api_types: Optional[List[str]]) -> pd.DataFrame:
+    """Filter DataFrame by API types if specified."""
+    if not api_types:
+        return df
+    
+    if "eventSource" not in df.columns:
+        return df
+    
+    # Extract service names from eventSource (e.g., "ec2.amazonaws.com" -> "ec2")
+    df = df.copy()
+    df["service"] = df["eventSource"].str.replace(".amazonaws.com", "", regex=False)
+    mask = df["service"].isin(api_types)
+    return df[mask].drop(columns=["service"])
+
+
+def filter_readonly_logs(df: pd.DataFrame, verbose: bool = False) -> pd.DataFrame:
+    """Filter logs by readOnly field."""
+    if "readOnly" not in df.columns:
+        if verbose:
+            print("Field 'readOnly' not found; continuing with all logs.")
+        return df.copy()
+    
+    s = df["readOnly"]
+    if s.dtype == bool:
+        ro_mask = s
+    else:
+        ro_mask = s.astype(str).str.lower().isin(["true", "1", "t", "yes", "y"])
+    
+    return df[ro_mask].copy()
+
+
+def _filter_readonly_logs(df: pd.DataFrame, verbose: bool = False) -> pd.DataFrame:
+    """Helper function to filter logs by readOnly field (alias for filter_readonly_logs)."""
+    return filter_readonly_logs(df, verbose)
+
+
+def _load_file_records(file_path: str, verbose: bool = False) -> List[dict]:
+    """Helper function to load records from a single file or directory."""
+    
+    if os.path.isfile(file_path):
+        # Single file - treat as CloudTrail JSON
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict) and "Records" in data:
+                return data["Records"]
+            elif isinstance(data, list):
+                return data
+            else:
+                if verbose:
+                    print(f"Warning: Unexpected data format in {file_path}")
+                return []
+        except Exception as e:
+            if verbose:
+                print(f"Warning: Could not parse {file_path}: {e}")
+            return []
+    else:
+        # Directory - use existing parser
+        df = load_cloudtrail_dir(file_path)
+        if not df.empty:
+            return df.to_dict(orient="records")
+        return []
+
+
 __all__ = [
     "encode_row_to_vector",
     "encode_dataframe",
@@ -272,6 +359,11 @@ __all__ = [
     "print_cluster_metadata",
     "analyze_timeframes",
     "TimeframeSummary",
+    "filter_by_time",
+    "filter_by_api_types",
+    "filter_readonly_logs",
+    "_filter_readonly_logs",
+    "_load_file_records",
 ]
 
 
