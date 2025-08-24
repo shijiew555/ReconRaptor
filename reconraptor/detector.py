@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
@@ -156,16 +157,16 @@ def select_top_suspicious_clusters(df: pd.DataFrame, labels: np.ndarray, top_k: 
 
 def print_cluster_metadata(df: pd.DataFrame, labels: np.ndarray, limit_event_names: int = 25) -> None:
     if labels.size == 0:
-        print("No clusters to display.")
+        sys.stderr.write("No clusters to display.\n")
         return
     df = df.copy()
     df["cluster"] = labels
     valid_labels = [lbl for lbl in sorted(df["cluster"].unique()) if lbl != -1]
-    print(f"Discovered {len(valid_labels)} clusters (excluding noise).")
+    sys.stderr.write(f"Discovered {len(valid_labels)} clusters (excluding noise).\n")
     total = len(df)
     noise_count = int((df["cluster"] == -1).sum())
     clustered_count = int(total - noise_count)
-    print(f"Clustered logs: {clustered_count}, Noise logs: {noise_count} (total: {total})")
+    sys.stderr.write(f"Clustered logs: {clustered_count}, Noise logs: {noise_count} (total: {total})\n")
     for lbl in valid_labels:
         sub = df[df["cluster"] == lbl]
         size = len(sub)
@@ -178,8 +179,8 @@ def print_cluster_metadata(df: pd.DataFrame, labels: np.ndarray, limit_event_nam
             unique_event_names_str = f"{shown} ... (+{len(unique_event_names)-len(shown)} more)"
         else:
             unique_event_names_str = str(unique_event_names)
-        print(
-            f"Cluster {lbl}: size={size}, error_rate={error_rate:.2%}, eventNames={unique_event_names_str}"
+        sys.stderr.write(
+            f"Cluster {lbl}: size={size}, error_rate={error_rate:.2%}, eventNames={unique_event_names_str}\n"
         )
 
 
@@ -305,8 +306,7 @@ def filter_by_api_types(df: pd.DataFrame, api_types: Optional[List[str]]) -> pd.
 def filter_readonly_logs(df: pd.DataFrame, verbose: bool = False) -> pd.DataFrame:
     """Filter logs by readOnly field."""
     if "readOnly" not in df.columns:
-        if verbose:
-            print("Field 'readOnly' not found; continuing with all logs.")
+        sys.stderr.write("Field 'readOnly' not found; continuing with all logs.\n")
         return df.copy()
     
     s = df["readOnly"]
@@ -336,12 +336,10 @@ def _load_file_records(file_path: str, verbose: bool = False) -> List[dict]:
             elif isinstance(data, list):
                 return data
             else:
-                if verbose:
-                    print(f"Warning: Unexpected data format in {file_path}")
+                sys.stderr.write(f"Warning: Unexpected data format in {file_path}\n")
                 return []
         except Exception as e:
-            if verbose:
-                print(f"Warning: Could not parse {file_path}: {e}")
+            sys.stderr.write(f"Warning: Could not parse {file_path}: {e}\n")
             return []
     elif os.path.isdir(file_path):
         # Directory - use existing parser
@@ -350,21 +348,17 @@ def _load_file_records(file_path: str, verbose: bool = False) -> List[dict]:
             if not df.empty:
                 return df.to_dict(orient="records")
             else:
-                if verbose:
-                    print(f"Warning: No valid JSON files found in directory: {file_path}")
+                sys.stderr.write(f"Warning: No valid JSON files found in directory: {file_path}\n")
                 return []
         except (FileNotFoundError, NotADirectoryError, PermissionError) as e:
-            if verbose:
-                print(f"Warning: Could not access directory {file_path}: {e}")
+            sys.stderr.write(f"Warning: Could not access directory {file_path}: {e}\n")
             return []
         except Exception as e:
-            if verbose:
-                print(f"Warning: Unexpected error processing directory {file_path}: {e}")
+            sys.stderr.write(f"Warning: Unexpected error processing directory {file_path}: {e}\n")
             return []
     else:
         # Path doesn't exist
-        if verbose:
-            print(f"Warning: Path does not exist: {file_path}")
+        sys.stderr.write(f"Warning: Path does not exist: {file_path}\n")
         return []
 
 
