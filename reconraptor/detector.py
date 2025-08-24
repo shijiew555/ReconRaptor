@@ -277,23 +277,28 @@ def filter_by_time(df: pd.DataFrame, start_time: Optional[str], end_time: Option
     if "eventTime" not in df.columns:
         return df
     
-    df = df.copy()
+    # Use boolean masking instead of copying and modifying
+    mask = pd.Series([True] * len(df), index=df.index)
+    
     if start_time:
         try:
             start_dt = pd.to_datetime(start_time)
-            df = df[df["eventTime"] >= start_dt]
+            mask &= df["eventTime"] >= start_dt
         except (ValueError, TypeError):
             # If time parsing fails, return original DataFrame
+            sys.stderr.write(f"Warning: Could not parse start time '{start_time}'; skipping start time filter\n")
             return df
+    
     if end_time:
         try:
             end_dt = pd.to_datetime(end_time)
-            df = df[df["eventTime"] <= end_dt]
+            mask &= df["eventTime"] <= end_dt
         except (ValueError, TypeError):
             # If time parsing fails, return original DataFrame
+            sys.stderr.write(f"Warning: Could not parse end time '{end_time}'; skipping end time filter\n")
             return df
     
-    return df
+    return df[mask]
 
 
 def filter_by_api_types(df: pd.DataFrame, api_types: Optional[List[str]]) -> pd.DataFrame:
@@ -305,7 +310,7 @@ def filter_by_api_types(df: pd.DataFrame, api_types: Optional[List[str]]) -> pd.
         return df
     
     # Extract service names from eventSource (e.g., "ec2.amazonaws.com" -> "ec2")
-    df = df.copy()
+    df = df
     df["service"] = df["eventSource"].str.replace(".amazonaws.com", "", regex=False)
     mask = df["service"].isin(api_types)
     return df[mask].drop(columns=["service"])
@@ -315,7 +320,7 @@ def filter_readonly_logs(df: pd.DataFrame, verbose: bool = False) -> pd.DataFram
     """Filter logs by readOnly field."""
     if "readOnly" not in df.columns:
         sys.stderr.write("Field 'readOnly' not found; continuing with all logs.\n")
-        return df.copy()
+        return df
     
     s = df["readOnly"]
     if s.dtype == bool:
