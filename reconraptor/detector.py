@@ -343,11 +343,28 @@ def _load_file_records(file_path: str, verbose: bool = False) -> List[dict]:
             if verbose:
                 print(f"Warning: Could not parse {file_path}: {e}")
             return []
-    else:
+    elif os.path.isdir(file_path):
         # Directory - use existing parser
-        df = load_cloudtrail_dir(file_path)
-        if not df.empty:
-            return df.to_dict(orient="records")
+        try:
+            df = load_cloudtrail_dir(file_path)
+            if not df.empty:
+                return df.to_dict(orient="records")
+            else:
+                if verbose:
+                    print(f"Warning: No valid JSON files found in directory: {file_path}")
+                return []
+        except (FileNotFoundError, NotADirectoryError, PermissionError) as e:
+            if verbose:
+                print(f"Warning: Could not access directory {file_path}: {e}")
+            return []
+        except Exception as e:
+            if verbose:
+                print(f"Warning: Unexpected error processing directory {file_path}: {e}")
+            return []
+    else:
+        # Path doesn't exist
+        if verbose:
+            print(f"Warning: Path does not exist: {file_path}")
         return []
 
 
