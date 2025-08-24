@@ -16,9 +16,7 @@ def format_cluster_metadata_text(df: pd.DataFrame, labels) -> str:
     if getattr(labels, "size", 0) == 0:
         return "No clusters to display."
     
-    df = df.copy()
-    df["cluster"] = labels
-    valid_labels = [lbl for lbl in sorted(df["cluster"].unique()) if lbl != -1]
+    valid_labels = [lbl for lbl in sorted(set(labels)) if lbl != -1]
     
     lines.extend([
         f"Clustering Results:",
@@ -27,7 +25,7 @@ def format_cluster_metadata_text(df: pd.DataFrame, labels) -> str:
     ])
     
     total = len(df)
-    noise_count = int((df["cluster"] == -1).sum())
+    noise_count = int((labels == -1).sum())
     clustered_count = int(total - noise_count)
     
     lines.extend([
@@ -39,7 +37,9 @@ def format_cluster_metadata_text(df: pd.DataFrame, labels) -> str:
     ])
     
     for i, lbl in enumerate(valid_labels, 1):
-        sub = df[df["cluster"] == lbl]
+        # Filter data for this cluster without copying the DataFrame
+        cluster_mask = labels == lbl
+        sub = df[cluster_mask]
         size = len(sub)
         if size == 0:
             continue
@@ -213,13 +213,14 @@ def _output_clusters_json(data: dict) -> None:
     """Helper function to output clusters in JSON format."""
     import json
     clusters = []
-    df_clustered = data["df"].copy()
-    df_clustered["cluster"] = data["labels"]
+    labels = data["labels"]
     
-    for cluster_id in sorted(set(data["labels"])):
+    for cluster_id in sorted(set(labels)):
         if cluster_id == -1:
             continue
-        cluster_data = df_clustered[df_clustered["cluster"] == cluster_id]
+        # Filter data for this cluster without copying the DataFrame
+        cluster_mask = labels == cluster_id
+        cluster_data = data["df"][cluster_mask]
         clusters.append({
             "cluster_id": int(cluster_id),
             "size": len(cluster_data),
