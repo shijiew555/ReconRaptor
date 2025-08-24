@@ -7,6 +7,7 @@ import sys
 from typing import List, Optional
 
 import pandas as pd
+import json
 
 """
 CLI options for ReconRaptor
@@ -68,9 +69,7 @@ def run(
         return 1
     
     if verbose:
-        print(f"Processing {len(expanded_files)} files/directories:")
-        for f in expanded_files:
-            print(f"  - {f}")
+        print(json.dumps({"message": "Processing files", "count": len(expanded_files), "files": expanded_files}))
     
     # Load and combine all specified files
     all_records = []
@@ -79,7 +78,7 @@ def run(
         all_records.extend(records)
     
     if not all_records:
-        print("No logs loaded from specified files.")
+        print(json.dumps({"error": "No logs loaded from specified files"}))
         return 2
     
     df = pd.DataFrame.from_records(all_records)
@@ -89,28 +88,28 @@ def run(
         df["eventTime"] = pd.to_datetime(df["eventTime"], errors="coerce")
     
     if verbose:
-        print(f"Loaded {len(df)} total records")
+        print(json.dumps({"message": "Loaded total records", "count": len(df)}))
     
     # Apply filters
     df = filter_by_time(df, start_time, end_time)
     df = filter_by_api_types(df, api_types)
     
     if verbose:
-        print(f"After filtering: {len(df)} records")
+        print(json.dumps({"message": "After filtering", "count": len(df)}))
     
     if df.empty:
-        print("No logs remaining after filtering.")
+        print(json.dumps({"error": "No logs remaining after filtering"}))
         return 0
 
     # Filter readOnly
     df_ro = _filter_readonly_logs(df, verbose)
 
     if df_ro.empty:
-        print("No readOnly logs after filtering.")
+        print(json.dumps({"error": "No readOnly logs after filtering"}))
         return 0
 
     if verbose:
-        print(f"Read-only logs: {len(df_ro)}")
+        print(json.dumps({"message": "Read-only logs", "count": len(df_ro)}))
 
     features = encode_dataframe(df_ro)
     if features.shape[0] == 0:
