@@ -75,14 +75,7 @@ def guess_os_from_user_agent(ua: str) -> str:
     return "Unknown"
 
 
-# backwards-compatible aliases with internal-style names
-_safe_str = safe_str
-_hash32 = hash32
-_ip_to_int = ip_to_int
-_user_agent_to_num = user_agent_to_num
-_json_length = json_length
-_num_keys = num_keys
-_guess_os_from_user_agent = guess_os_from_user_agent
+
 
 
 __all__ = [
