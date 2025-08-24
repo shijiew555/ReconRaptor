@@ -13,13 +13,28 @@ def load_cloudtrail_dir(logs_dir: str) -> pd.DataFrame:
     Assumes user only pass in files that are only formatted in CloudTrail JSON with
     top-level {"Records": ...}, or a top-level list of records.
     """
+    # Check if directory exists
+    if not os.path.exists(logs_dir):
+        raise FileNotFoundError(f"Directory not found: {logs_dir}")
+    
+    if not os.path.isdir(logs_dir):
+        raise NotADirectoryError(f"Path is not a directory: {logs_dir}")
+    
     records: List[Dict[str, Any]] = []
 
-    filenames = [
-        os.path.join(logs_dir, name)
-        for name in sorted(os.listdir(logs_dir))
-        if name.lower().endswith(".json")
-    ]
+    try:
+        filenames = [
+            os.path.join(logs_dir, name)
+            for name in sorted(os.listdir(logs_dir))
+            if name.lower().endswith(".json")
+        ]
+    except PermissionError:
+        raise PermissionError(f"Permission denied accessing directory: {logs_dir}")
+    
+    if not filenames:
+        # Return empty DataFrame if no JSON files found
+        return pd.DataFrame()
+    
     for path in filenames:
         # Try json Lines, but only accept if chunks look like per event rows
         try:

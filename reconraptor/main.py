@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import glob
+import os
+import sys
 from typing import List, Optional
 
 import pandas as pd
@@ -36,9 +39,42 @@ def run(
     output_format: str = "table",
     verbose: bool = False,
 ) -> int:
+    # Expand glob patterns and check if files exist
+    expanded_files = []
+    for file_pattern in files:
+        if '*' in file_pattern or '?' in file_pattern:
+            # Handle glob patterns
+            matched_files = glob.glob(file_pattern)
+            if not matched_files:
+                if verbose:
+                    print(f"Warning: No files found matching pattern: {file_pattern}")
+                continue
+            expanded_files.extend(matched_files)
+        else:
+            # Single file or directory
+            if os.path.exists(file_pattern):
+                expanded_files.append(file_pattern)
+            else:
+                if verbose:
+                    print(f"Warning: File/directory not found: {file_pattern}")
+                continue
+    
+    if not expanded_files:
+        print("Error: No valid files or directories found to process.")
+        print("Please check that:")
+        print("  - The specified paths exist")
+        print("  - You have read permissions")
+        print("  - For glob patterns, ensure they match existing files")
+        return 1
+    
+    if verbose:
+        print(f"Processing {len(expanded_files)} files/directories:")
+        for f in expanded_files:
+            print(f"  - {f}")
+    
     # Load and combine all specified files
     all_records = []
-    for file_path in files:
+    for file_path in expanded_files:
         records = _load_file_records(file_path, verbose)
         all_records.extend(records)
     
