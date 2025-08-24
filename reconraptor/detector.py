@@ -279,11 +279,19 @@ def filter_by_time(df: pd.DataFrame, start_time: Optional[str], end_time: Option
     
     df = df.copy()
     if start_time:
-        start_dt = pd.to_datetime(start_time)
-        df = df[df["eventTime"] >= start_dt]
+        try:
+            start_dt = pd.to_datetime(start_time)
+            df = df[df["eventTime"] >= start_dt]
+        except (ValueError, TypeError):
+            # If time parsing fails, return original DataFrame
+            return df
     if end_time:
-        end_dt = pd.to_datetime(end_time)
-        df = df[df["eventTime"] <= end_dt]
+        try:
+            end_dt = pd.to_datetime(end_time)
+            df = df[df["eventTime"] <= end_dt]
+        except (ValueError, TypeError):
+            # If time parsing fails, return original DataFrame
+            return df
     
     return df
 
