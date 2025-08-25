@@ -2,6 +2,21 @@
 
 A CLI tool that sniffs out suspicious reconnaissance activity in AWS CloudTrail logs.
 
+The tool analyzes CloudTrail logs using machine learning clustering on 13 key attributes:
+1. **eventName** - API operation name
+2. **eventSource** - AWS service (e.g., "ec2.amazonaws.com")
+3. **eventCategory** - Event classification
+4. **eventType** - Event type (e.g., "AwsApiCall")
+5. **userIdentity.type** - Identity type (e.g., "IAMUser", "AssumedRole")
+6. **sessionContext.sessionIssuer.type** - Cross-account session issuer type
+7. **recipientAccountId** - Target AWS account ID
+8. **sourceIPAddress** - Source IP address
+9. **awsRegion** - AWS region where event occurred
+10. **userAgent** - User agent string
+11. **errorCode** - Error code if present
+12. **requestParameters** - Number of request parameters
+13. **responseElements** - Length of response elements
+
 The source code is organized in the `reconraptor/` folder with four main components:
 - `main.py`: CLI interface and control flow
 - `parser.py`: CloudTrail log file parsing
