@@ -41,7 +41,7 @@ def load_cloudtrail_dir(logs_dir: str) -> pd.DataFrame:
     records: List[Dict[str, Any]] = []
     
     for path in filenames:
-        # Try standard JSON format first (CloudTrail format)
+        # Assume the file has valid JSON format (CloudTrail format)
         try:
             with open(path, 'r') as f:
                 data = json.load(f)
@@ -51,26 +51,20 @@ def load_cloudtrail_dir(logs_dir: str) -> pd.DataFrame:
                 valid_records = [record for record in data["Records"] 
                                if isinstance(record, dict) and "eventName" in record]
                 records.extend(valid_records)
-                continue
             elif isinstance(data, list):
                 # Validate that records have required fields
                 valid_records = [record for record in data 
                                if isinstance(record, dict) and "eventName" in record]
                 records.extend(valid_records)
-                continue
-        except (json.JSONDecodeError, Exception):
-            pass
-        
-        # Try JSON Lines format as fallback
-        try:
-            for chunk in pd.read_json(path, lines=True, chunksize=100_000):
-                if "eventName" not in chunk.columns:
-                    break
-                records.extend(chunk.to_dict(orient="records"))
-        except ValueError:
-            sys.stderr.write(f"Error reading JSON file {path}: Invalid JSON format.\n")
-        except Exception:
-            sys.stderr.write(f"Error reading JSON file {path}: An unexpected error occurred.\n")
+        except json.JSONDecodeError as e:
+            # Skip file if cannot be parsed
+            sys.stderr.write(f"Warning: Invalid JSON in {path}: {e}\n")
+        except FileNotFoundError as e:
+            sys.stderr.write(f"Warning: File not found {path}: {e}\n")
+        except PermissionError as e:
+            sys.stderr.write(f"Warning: Permission denied reading {path}: {e}\n")
+        except Exception as e:
+            sys.stderr.write(f"Warning: Unexpected error reading {path}: {e}\n")
 
     if not records:
         sys.stderr.write(f"Error: No valid CloudTrail records found in directory: {logs_dir}\n")
@@ -84,6 +78,7 @@ def load_cloudtrail_dir(logs_dir: str) -> pd.DataFrame:
             df["eventTime"] = pd.to_datetime(df["eventTime"], errors="coerce")
         except Exception as e:
             sys.stderr.write(f"Warning: Could not parse eventTime column: {e}\n")
+            sys.exit(1)
 
     return df
 
