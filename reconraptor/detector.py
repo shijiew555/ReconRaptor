@@ -34,7 +34,23 @@ class TimeframeSummary:
 
 
 def encode_row_to_vector(row: pd.Series) -> np.ndarray:
-    """Encode a single CloudTrail record to a 13-dimensional vector."""
+    """Encode a single CloudTrail record to a 13-dimensional vector.
+
+    The 13 attributes used to represent a single CloudTrail record are:
+    1. eventName - API operation name
+    2. eventSource - AWS service (e.g., "ec2.amazonaws.com")
+    3. eventCategory - Event classification
+    4. eventType - Event type (e.g., "AwsApiCall")
+    5. userIdentity.type - Identity type (e.g., "IAMUser", "AssumedRole")
+    6. sessionContext.sessionIssuer.type - Cross-account session issuer type
+    7. recipientAccountId - Target AWS account ID
+    8. sourceIPAddress - Source IP address
+    9. awsRegion - AWS region where event occurred
+    10. userAgent - User agent string
+    11. errorCode - Error code if present
+    12. requestParameters - Number of request parameters
+    13. responseElements - Length of response elements
+    """
     event_name = hash32(safe_str(row.get("eventName")))
     event_source = hash32(safe_str(row.get("eventSource")))
     event_category = hash32(safe_str(row.get("eventCategory")))
@@ -98,6 +114,7 @@ def cluster_dbscan_stable(features: np.ndarray) -> np.ndarray:
         Cluster labels array
     """
     if features.size == 0:
+        sys.stderr.write("Warning: No logs to cluster, returning empty result\n")
         return np.empty((0,), dtype=int)
     
     # Set random seed for reproducibility
@@ -106,11 +123,10 @@ def cluster_dbscan_stable(features: np.ndarray) -> np.ndarray:
     # Create a copy to avoid modifying original data
     features_copy = features.copy()
     
-    # Sort features by first few dimensions to ensure consistent ordering
     # This helps DBSCAN produce more stable results
     if len(features_copy) > 1:
-        # Sort by first 3 features to ensure consistent ordering
-        sort_indices = np.lexsort([features_copy[:, i] for i in range(min(3, features_copy.shape[1]))])
+        # Sort by all 13 features to ensure maximum ordering consistency
+        sort_indices = np.lexsort([features_copy[:, i] for i in range(features_copy.shape[1])])
         features_copy = features_copy[sort_indices]
     
     # Apply feature scaling
